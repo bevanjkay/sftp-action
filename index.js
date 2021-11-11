@@ -28,6 +28,10 @@ if (privateKeyIsFile == "true") {
 const localPath = core.getInput('localPath');
 const remotePath = core.getInput('remotePath');
 
+sftp.on('upload', info => {
+    console.log(`Uploaded ${info.source}`);
+  });
+
 sftp.connect({
     host: host,
     port: port,
