@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 
 let Client = require('ssh2-sftp-client');
-let sftp = new Client();
 
 const host = core.getInput('host');
 const port = parseInt(core.getInput('port'));
@@ -20,7 +19,7 @@ if (passphrase != undefined) {
     core.setSecret(passphrase);
 }
 
-if (privateKeyIsFile == "true") {
+if (privateKeyIsFile == "true" && privateKey) {
     var privateKey = fs.readFileSync(privateKey);
     core.setSecret(privateKey);
 }
@@ -28,46 +27,33 @@ if (privateKeyIsFile == "true") {
 const localPath = core.getInput('localPath');
 const remotePath = core.getInput('remotePath');
 
-sftp.connect({
-    host: host,
-    port: port,
-    username: username,
-    password: password,
-    agent: agent,
-    privateKey: privateKey,
-    passphrase: passphrase
-}).then(async () => {
-    console.log("Connection established.");
-    console.log("Current working directory: " + await sftp.cwd())
-    
-    sftp.on('upload', info => {
-    console.log(`Uploaded ${info.source}`);
-  });
+const config = {
+    host,
+    port,
+    username,
+    password,
+};
 
-    if (fs.lstatSync(localPath).isDirectory()) {
-        return sftp.uploadDir(localPath, remotePath);
-    } else {
+async function main() {
+    const client = new Client();
 
-        var directory = await sftp.realPath(path.dirname(remotePath));
-        if (!(await sftp.exists(directory))) {
-            await sftp.mkdir(directory, true);
-            console.log("Created directories.");
-        }
-        
-        var modifiedPath = remotePath;
-        if (await sftp.exists(remotePath)) {
-            if ((await sftp.stat(remotePath)).isDirectory) {
-                var modifiedPath = modifiedPath + path.basename(localPath);
-            }
-        }
-
-        return sftp.put(fs.createReadStream(localPath), modifiedPath);
+    try {
+        await client.connect(config);
+        client.on('upload', info => {
+            console.log(`Uploaded ${info.source}`);
+        });
+        let rslt = await client.uploadDir(localPath, remotePath);
+        return rslt;
+    } finally {
+        client.end();
     }
+}
 
-}).then(() => {
-    console.log("Upload finished.");
-    return sftp.end();
-}).catch(err => {
-    core.setFailed(`Action failed with error ${err}`);
-    process.exit(1);
-});
+main()
+    .then(msg => {
+        return console.log(msg);
+    })
+    .catch(err => {
+        core.setFailed(`Action failed with error ${err}`);
+        process.exit(1);
+    });
